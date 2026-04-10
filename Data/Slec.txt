@@ -1,0 +1,21 @@
+# Slec.txt — Jeu d'essai de la simulation
+# Format : une ligne = un message à transmettre (une communication complète).
+# Les lignes vides et les lignes commençant par # sont ignorées.
+#
+# Les adresses source et destination sont tirées aléatoirement par ET (§3.3).
+# La donnée représente le contenu du message utilisateur.
+
+# ── Test 1 : message court (pas de segmentation)
+Bonjour, ceci est le premier message court.
+
+# ── Test 2 : message long (segmentation en 3 paquets, >256 octets)
+SEGMENT_TEST: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+
+# ── Test 3 : message de 128 octets exactement (1 paquet, M=0)
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+# ── Test 4 : message intermédiaire
+Troisième communication — données de test réseau OSI.
+
+# ── Test 5 : message minimal
+OK
