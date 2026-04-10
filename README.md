@@ -48,14 +48,14 @@ Le but maintenant est de terminer l’implémentation de chaque partie en respec
 ProjetReseaux/
 ├── Program.cs
 ├── Models/
-│   ├── ConnectionContext.cs
-│   ├── Primitive.cs
-│   └── Packet.cs
+│   ├── ConnectionContext.cs (Samir)
+│   ├── Primitive.cs (Samir)
+│   └── Packet.cs (Samir)
 ├── Services/
 │   ├── TransportEntity.cs
 │   ├── NetworkEntity.cs
 │   ├── LinkServiceSimulator.cs
-│   ├── FileService.cs
+│   ├── FileService.cs (Samir)
 │   └── SegmentationService.cs
 ├── Data/
 │   ├── Slec.txt
