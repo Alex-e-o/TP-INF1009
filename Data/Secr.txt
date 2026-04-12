@@ -1,0 +1,5 @@
+[IDENT   1] src=220 dst=11  → Communication réussie | conn=1 | 43 octets transmis.
+[IDENT   2] src=227 dst=2   → Communication réussie | conn=2 | 310 octets transmis.
+[IDENT   3] src=248 dst=141 → Communication réussie | conn=3 | 128 octets transmis.
+[IDENT   4] src=156 dst=208 → Connexion refusée par le distant.
+[IDENT   5] src=226 dst=82  → Communication réussie | conn=5 | 2 octets transmis.

@@ -1,46 +1,59 @@
-﻿using System.Text;
-using INF1009.Models;
+﻿using INF1009.Models;
 
 namespace INF1009.Services;
 
 public class SegmentationService
 {
-    public const int MaxPayloadSize = 128;
-
-    public List<Packet> SegmentData(ConnectionContext connection, string data)
+    private const int MaxDataSize = 128;
+    
+    public List<Packet> BuildDataPackets(ConnectionContext context, byte[] userData)
     {
         var packets = new List<Packet>();
 
-        if (string.IsNullOrEmpty(data))
+        if (userData is null || userData.Length == 0)
             return packets;
 
-        byte[] bytes = Encoding.UTF8.GetBytes(data);
         int offset = 0;
 
-        while (offset < bytes.Length)
+        while (offset < userData.Length)
         {
-            int length = Math.Min(MaxPayloadSize, bytes.Length - offset);
-            byte[] chunk = bytes[offset..(offset + length)];
-            bool moreData = offset + length < bytes.Length;
+            int remaining = userData.Length - offset;
+            int chunkSize = Math.Min(MaxDataSize, remaining);
 
-            var packet = new Packet
-            {
-                Type = PacketType.Data,
-                ConnectionNumber = connection.ConnectionNumber,
-                SourceAddress = connection.SourceAddress,
-                DestinationAddress = connection.DestinationAddress,
-                Ps = connection.SendSequenceNumber % 8,
-                Pr = connection.ExpectedReceiveNumber % 8,
-                MoreData = moreData,
-                Payload = Encoding.UTF8.GetString(chunk)
-            };
+            byte[] chunk = userData
+                .Skip(offset)
+                .Take(chunkSize)
+                .ToArray();
+
+            bool moreBit = (offset + chunkSize) < userData.Length;
+
+            Packet packet = Packet.DataPacket(
+                connNum: context.ConnectionNumber,
+                ps: context.PS,
+                pr: context.PR,
+                moreBit: moreBit,
+                data: chunk
+            );
 
             packets.Add(packet);
 
-            connection.SendSequenceNumber = (connection.SendSequenceNumber + 1) % 8;
-            offset += length;
+            context.AdvancePS();
+            offset += chunkSize;
         }
 
         return packets;
+    }
+    
+    public bool RequiresSegmentation(byte[]? userData)
+    {
+        return userData is not null && userData.Length > MaxDataSize;
+    }
+    
+    public int GetSegmentCount(byte[]? userData)
+    {
+        if (userData is null || userData.Length == 0)
+            return 0;
+
+        return (int)Math.Ceiling(userData.Length / (double)MaxDataSize);
     }
 }

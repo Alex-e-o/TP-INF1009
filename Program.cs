@@ -22,13 +22,11 @@ internal class Program
 
             EnsureDataFolderExists(dataFolder);
 
-            var fileService = new FileService(slecPath, secrPath, lecrPath, llecPath);
-            var segmentationService = new SegmentationService();
-            var linkServiceSimulator = new LinkServiceSimulator(fileService);
-            var networkEntity = new NetworkEntity(linkServiceSimulator, segmentationService);
-            var transportEntity = new TransportEntity(fileService, networkEntity);
-
-            fileService.ClearOutputFiles();
+            Console.WriteLine($"Dossier Data : {dataFolder}");
+            Console.WriteLine($"Slec         : {slecPath}");
+            Console.WriteLine($"Secr         : {secrPath}");
+            Console.WriteLine($"Lecr         : {lecrPath}");
+            Console.WriteLine($"Llec         : {llecPath}");
 
             if (!File.Exists(slecPath))
             {
@@ -37,13 +35,22 @@ internal class Program
                 return;
             }
 
-            transportEntity.ProcessAllRequests();
+            var fileService = new FileService(slecPath, secrPath, lecrPath, llecPath);
+            var segmentationService = new SegmentationService();
+            var linkServiceSimulator = new LinkServiceSimulator(fileService);
+            var networkEntity = new NetworkEntity(linkServiceSimulator, segmentationService);
+            var transportEntity = new TransportEntity(fileService, networkEntity);
 
+            fileService.ClearOutputFiles();
+            
+            transportEntity.Run();
             Console.WriteLine("Simulation terminée avec succès.");
         }
         catch (Exception ex)
         {
+            Console.WriteLine();
             Console.WriteLine("Une erreur est survenue pendant l'exécution du programme.");
+            Console.WriteLine($"Type   : {ex.GetType().Name}");
             Console.WriteLine($"Détail : {ex.Message}");
         }
 

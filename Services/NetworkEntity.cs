@@ -4,185 +4,212 @@ namespace INF1009.Services;
 
 public class NetworkEntity
 {
-    private readonly LinkServiceSimulator _linkService;
+    private readonly LinkServiceSimulator _linkServiceSimulator;
     private readonly SegmentationService _segmentationService;
-    private readonly Dictionary<int, ConnectionContext> _connections = new();
-    private readonly Random _random = new();
+
+    private readonly Dictionary<int, ConnectionContext> _contextsByEndpointId = new();
+    private readonly Dictionary<int, ConnectionContext> _contextsByConnectionNumber = new();
 
     private int _nextConnectionNumber = 1;
 
-    public NetworkEntity(LinkServiceSimulator linkService, SegmentationService segmentationService)
+    public NetworkEntity(LinkServiceSimulator linkServiceSimulator, SegmentationService segmentationService)
     {
-        _linkService = linkService;
+        _linkServiceSimulator = linkServiceSimulator;
         _segmentationService = segmentationService;
     }
 
-    public Primitive HandlePrimitive(Primitive primitive)
+    public Primitive? HandlePrimitive(Primitive primitive)
     {
         return primitive.Type switch
         {
-            PrimitiveType.NConnectReq => HandleConnectRequest(primitive),
-            PrimitiveType.NDataReq => HandleDataRequest(primitive),
-            PrimitiveType.NDisconnectReq => HandleDisconnectRequest(primitive),
-            _ => throw new NotSupportedException($"Primitive non supportée : {primitive.Type}")
+            PrimitiveType.N_CONNECT_REQ => HandleConnectRequest(primitive),
+            PrimitiveType.N_DATA_REQ => HandleDataRequest(primitive),
+            PrimitiveType.N_DISCONNECT_REQ => HandleDisconnectRequest(primitive),
+            _ => throw new InvalidOperationException($"Primitive non supportée : {primitive.Type}")
         };
     }
 
-    private Primitive HandleConnectRequest(Primitive primitive)
+    private Primitive? HandleConnectRequest(Primitive primitive)
     {
-        if (primitive.SourceAddress % 27 == 0)
-        {
-            return new Primitive
-            {
-                Type = PrimitiveType.NDisconnectInd,
-                EndpointId = primitive.EndpointId,
-                SourceAddress = primitive.SourceAddress,
-                DestinationAddress = primitive.DestinationAddress,
-                Reason = DisconnectReason.ProviderRefusal
-            };
-        }
+        int connectionNumber = _nextConnectionNumber++;
 
         var context = new ConnectionContext
         {
             EndpointId = primitive.EndpointId,
-            ConnectionNumber = _nextConnectionNumber++,
+            ConnectionNumber = connectionNumber,
             SourceAddress = primitive.SourceAddress,
             DestinationAddress = primitive.DestinationAddress,
-            State = ConnectionState.WaitingForEstablishmentConfirmation
+            State = ConnectionState.WaitingForConfirmation,
+            PS = 0,
+            PR = 0
         };
 
-        _connections[primitive.EndpointId] = context;
+        _contextsByEndpointId[context.EndpointId] = context;
+        _contextsByConnectionNumber[context.ConnectionNumber] = context;
 
-        var callPacket = new Packet
+        // --- DÉBUT DE LA CORRECTION ---
+        // Vérification du refus du fournisseur (multiple de 27) selon la section 3.6 du PDF
+        if (context.SourceAddress % 27 == 0)
         {
-            Type = PacketType.Call,
-            ConnectionNumber = context.ConnectionNumber,
-            SourceAddress = context.SourceAddress,
-            DestinationAddress = context.DestinationAddress
-        };
+            context.State = ConnectionState.Closed;
 
-        Packet? response = _linkService.SendPacket(callPacket);
-
-        if (response is null || response.Type == PacketType.Disconnect)
-        {
-            context.State = ConnectionState.Refused;
-
-            return new Primitive
-            {
-                Type = PrimitiveType.NDisconnectInd,
-                EndpointId = context.EndpointId,
-                SourceAddress = context.SourceAddress,
-                DestinationAddress = context.DestinationAddress,
-                Reason = response?.Reason ?? DisconnectReason.Timeout
-            };
+            return Primitive.DisconnectInd(
+                endpointId: context.EndpointId,
+                reason: (byte)ReleaseReason.ProviderRefused);
         }
 
-        context.State = ConnectionState.Established;
+        var callPacket = Packet.CallPacket(
+            connNum: context.ConnectionNumber,
+            src: context.SourceAddress,
+            dst: context.DestinationAddress);
 
-        return new Primitive
+        Packet? response = _linkServiceSimulator.Send(callPacket, context.SourceAddress);
+
+        if (response is null)
         {
-            Type = PrimitiveType.NConnectConf,
-            EndpointId = context.EndpointId,
-            SourceAddress = context.SourceAddress,
-            DestinationAddress = context.DestinationAddress
-        };
+            context.State = ConnectionState.Closed;
+
+            return Primitive.DisconnectInd(
+                endpointId: context.EndpointId,
+                reason: (byte)ReleaseReason.ProviderRefused);
+        }
+
+        if (response.Type == PacketType.ConnectionGranted)
+        {
+            context.State = ConnectionState.Established;
+
+            return Primitive.ConnectConf(
+                endpointId: context.EndpointId,
+                connNum: context.ConnectionNumber);
+        }
+
+        if (response.Type == PacketType.Release)
+        {
+            context.State = ConnectionState.Closed;
+
+            return Primitive.DisconnectInd(
+                endpointId: context.EndpointId,
+                reason: (byte)response.Reason);
+        }
+
+        context.State = ConnectionState.Closed;
+
+        return Primitive.DisconnectInd(
+            endpointId: context.EndpointId,
+            reason: (byte)ReleaseReason.ProviderRefused);
     }
 
-    private Primitive HandleDataRequest(Primitive primitive)
+    private Primitive? HandleDataRequest(Primitive primitive)
     {
-        if (!_connections.TryGetValue(primitive.EndpointId, out ConnectionContext? context))
+        if (!_contextsByEndpointId.TryGetValue(primitive.EndpointId, out var context))
         {
-            return new Primitive
-            {
-                Type = PrimitiveType.NDisconnectInd,
-                EndpointId = primitive.EndpointId,
-                Reason = DisconnectReason.NormalRelease
-            };
+            throw new InvalidOperationException(
+                $"Aucun contexte trouvé pour EndpointId={primitive.EndpointId}");
         }
 
-        List<Packet> packets = _segmentationService.SegmentData(context, primitive.UserData ?? string.Empty);
-
-        foreach (Packet packet in packets)
+        if (context.State != ConnectionState.Established)
         {
-            Packet? response = _linkService.SendPacket(packet);
+            return Primitive.DisconnectInd(
+                endpointId: context.EndpointId,
+                reason: (byte)ReleaseReason.ProviderRefused);
+        }
 
-            if (response is null || response.Type == PacketType.Nack)
+        if (primitive.UserData is null || primitive.UserData.Length == 0)
+        {
+            return Primitive.DisconnectInd(
+                endpointId: context.EndpointId,
+                reason: (byte)ReleaseReason.None);
+        }
+
+        context.PendingData = primitive.UserData;
+
+        // 1. Appel de la bonne méthode qui génère directement la liste des paquets finis
+        var packets = _segmentationService.BuildDataPackets(context, context.PendingData);
+
+        int packetIndex = 0;
+        foreach (var packet in packets)
+        {
+            packetIndex++;
+
+            // 2. Envoi direct du paquet pré-construit
+            bool success = SendDataPacketWithSingleRetry(context, packet);
+
+            if (!success)
             {
-                if (context.RetransmissionAttempted)
-                {
-                    return new Primitive
-                    {
-                        Type = PrimitiveType.NDisconnectInd,
-                        EndpointId = context.EndpointId,
-                        SourceAddress = context.SourceAddress,
-                        DestinationAddress = context.DestinationAddress,
-                        Reason = response is null ? DisconnectReason.Timeout : DisconnectReason.NegativeAck
-                    };
-                }
+                context.State = ConnectionState.Closed;
 
-                context.RetransmissionAttempted = true;
-                response = _linkService.SendPacket(packet);
+                return Primitive.DisconnectInd(
+                    endpointId: context.EndpointId,
+                    reason: (byte)ReleaseReason.ProviderRefused);
+            }
+        }
 
-                if (response is null || response.Type == PacketType.Nack)
-                {
-                    return new Primitive
-                    {
-                        Type = PrimitiveType.NDisconnectInd,
-                        EndpointId = context.EndpointId,
-                        SourceAddress = context.SourceAddress,
-                        DestinationAddress = context.DestinationAddress,
-                        Reason = response is null ? DisconnectReason.Timeout : DisconnectReason.NegativeAck
-                    };
-                }
+        return null;
+    }
+
+    private Primitive? HandleDisconnectRequest(Primitive primitive)
+    {
+        if (!_contextsByEndpointId.TryGetValue(primitive.EndpointId, out var context))
+        {
+            throw new InvalidOperationException(
+                $"Aucun contexte trouvé pour EndpointId={primitive.EndpointId}");
+        }
+
+        context.State = ConnectionState.Releasing;
+
+        var releasePacket = Packet.ReleasePacket(
+            connNum: context.ConnectionNumber,
+            src: context.SourceAddress,
+            dst: context.DestinationAddress,
+            reason: ReleaseReason.None);
+
+        _linkServiceSimulator.Send(releasePacket, context.SourceAddress);
+
+        context.State = ConnectionState.Closed;
+
+        _contextsByConnectionNumber.Remove(context.ConnectionNumber);
+        _contextsByEndpointId.Remove(context.EndpointId);
+
+        return Primitive.DisconnectInd(
+            endpointId: context.EndpointId,
+            reason: (byte)ReleaseReason.None);
+    }
+
+    private bool SendDataPacketWithSingleRetry(ConnectionContext context, Packet packet)
+    {
+        for (int attempt = 1; attempt <= 2; attempt++)
+        {
+            Packet? response = _linkServiceSimulator.Send(packet, context.SourceAddress);
+
+            if (response is null)
+            {
+                continue;
             }
 
-            context.RetransmissionAttempted = false;
-            context.ExpectedReceiveNumber = response.Pr;
-        }
-
-        return new Primitive
-        {
-            Type = PrimitiveType.NDataInd,
-            EndpointId = primitive.EndpointId,
-            SourceAddress = primitive.SourceAddress,
-            DestinationAddress = primitive.DestinationAddress,
-            UserData = primitive.UserData
-        };
-    }
-
-    private Primitive HandleDisconnectRequest(Primitive primitive)
-    {
-        if (!_connections.TryGetValue(primitive.EndpointId, out ConnectionContext? context))
-        {
-            return new Primitive
+            if (response.Type == PacketType.Ack)
             {
-                Type = PrimitiveType.NDisconnectInd,
-                EndpointId = primitive.EndpointId,
-                Reason = DisconnectReason.NormalRelease
-            };
+                context.PR = response.PR;
+                return true;
+            }
+
+            if (response.Type == PacketType.NegativeAck)
+            {
+                if (attempt == 2)
+                {
+                    return false;
+                }
+
+                continue;
+            }
+
+            if (response.Type == PacketType.Release)
+            {
+                return false;
+            }
+
+            return false;
         }
 
-        var disconnectPacket = new Packet
-        {
-            Type = PacketType.Disconnect,
-            ConnectionNumber = context.ConnectionNumber,
-            SourceAddress = context.SourceAddress,
-            DestinationAddress = context.DestinationAddress,
-            Reason = DisconnectReason.NormalRelease
-        };
-
-        _linkService.SendPacket(disconnectPacket);
-
-        context.State = ConnectionState.Released;
-        _connections.Remove(primitive.EndpointId);
-
-        return new Primitive
-        {
-            Type = PrimitiveType.NDisconnectInd,
-            EndpointId = primitive.EndpointId,
-            SourceAddress = context.SourceAddress,
-            DestinationAddress = context.DestinationAddress,
-            Reason = DisconnectReason.NormalRelease
-        };
+        return false;
     }
 }
