@@ -11,7 +11,7 @@ internal class Program
         try
         {
             string projectRoot = Path.GetFullPath(
-                Path.Combine(AppContext.BaseDirectory, @"..\..\.."));
+                Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
 
             string dataFolder = Path.Combine(projectRoot, "Data");
 

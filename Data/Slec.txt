@@ -1,21 +1,37 @@
 # Slec.txt — Jeu d'essai de la simulation
-# Format : une ligne = un message à transmettre (une communication complète).
-# Les lignes vides et les lignes commençant par # sont ignorées.
+# Format : COMMANDE;param1;param2
 #
-# Les adresses source et destination sont tirées aléatoirement par ET (§3.3).
-# La donnée représente le contenu du message utilisateur.
+# CONNECT;source;destination  → demande de connexion (adresses 0-254)
+# DATA;endpointId;message     → envoi de données sur une connexion établie
+# DISCONNECT;endpointId       → libération de connexion
+#
+# Les lignes vides et commentaires (# ...) sont ignorés.
 
-# ── Test 1 : message court (pas de segmentation)
-Bonjour, ceci est le premier message court.
+# Scénario 1 : connexion normale + données courtes + libération
+CONNECT;42;100
+DATA;1;Bonjour, ceci est le premier message court.
+DISCONNECT;1
 
-# ── Test 2 : message long (segmentation en 3 paquets, >256 octets)
-SEGMENT_TEST: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+# Scénario 2 : connexion avec message long (segmentation en 3 paquets)
+CONNECT;23;157
+DATA;2;SEGMENT_TEST: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+DISCONNECT;2
 
-# ── Test 3 : message de 128 octets exactement (1 paquet, M=0)
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+# Scénario 3 : message de 128 octets exactement (1 paquet, M=0)
+CONNECT;50;200
+DATA;3;AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+DISCONNECT;3
 
-# ── Test 4 : message intermédiaire
-Troisième communication — données de test réseau OSI.
+# Scénario 4 : refus du fournisseur (src=27, multiple de 27)
+CONNECT;27;88
 
-# ── Test 5 : message minimal
-OK
+# Scénario 5 : pas de réponse du distant (src=19, multiple de 19)
+CONNECT;19;75
+
+# Scénario 6 : refus du distant (src=13, multiple de 13)
+CONNECT;13;99
+
+# Scénario 7 : connexion normale + données minimales
+CONNECT;60;24
+DATA;7;OK
+DISCONNECT;7
