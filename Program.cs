@@ -1,15 +1,23 @@
 ﻿using INF1009.Services;
+using System.Diagnostics;
 
 namespace INF1009;
 
+// Point d'entrée de la simulation réseau (couches Transport et Réseau)
 internal class Program
 {
     private static void Main(string[] args)
     {
-        Console.WriteLine("=== Début de la simulation du service de réseau ===");
+        Console.WriteLine("════════════════════════════════════════════════");
+        Console.WriteLine("    Simulation du service de réseau — INF1009   ");
+        Console.WriteLine("════════════════════════════════════════════════");
+        Console.WriteLine();
+
+        var chrono = Stopwatch.StartNew();
 
         try
         {
+            // --- Résolution des chemins ---
             string projectRoot = Path.GetFullPath(
                 Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
 
@@ -22,47 +30,59 @@ internal class Program
 
             EnsureDataFolderExists(dataFolder);
 
-            Console.WriteLine($"Dossier Data : {dataFolder}");
-            Console.WriteLine($"Slec         : {slecPath}");
-            Console.WriteLine($"Secr         : {secrPath}");
-            Console.WriteLine($"Lecr         : {lecrPath}");
-            Console.WriteLine($"Llec         : {llecPath}");
+            Console.WriteLine("[1/3] Fichiers de données :");
+            Console.WriteLine($"      Entrée  (S_lec) : {slecPath}");
+            Console.WriteLine($"      Sortie  (S_ecr) : {secrPath}");
+            Console.WriteLine($"      Entrée  (L_ecr) : {lecrPath}");
+            Console.WriteLine($"      Sortie  (L_lec) : {llecPath}");
+            Console.WriteLine();
 
             if (!File.Exists(slecPath))
             {
-                Console.WriteLine("Le fichier Slec.txt est introuvable.");
-                Console.WriteLine($"Chemin attendu : {slecPath}");
+                Console.WriteLine($"[ERREUR] Fichier introuvable : {slecPath}");
                 return;
             }
 
-            var fileService = new FileService(slecPath, secrPath, lecrPath, llecPath);
-            var segmentationService = new SegmentationService();
+            // --- Instanciation des couches ---
+            Console.WriteLine("[2/3] Initialisation des entités...");
+            var fileService          = new FileService(slecPath, secrPath, lecrPath, llecPath);
+            var segmentationService  = new SegmentationService();
             var linkServiceSimulator = new LinkServiceSimulator(fileService);
-            var networkEntity = new NetworkEntity(linkServiceSimulator, segmentationService);
-            var transportEntity = new TransportEntity(fileService, networkEntity);
+            var networkEntity        = new NetworkEntity(linkServiceSimulator, segmentationService);
+            var transportEntity      = new TransportEntity(fileService, networkEntity);
 
             fileService.ClearOutputFiles();
-            
+
+            // --- Lancement de la simulation ---
+            Console.WriteLine("[3/3] Exécution de la simulation...");
             transportEntity.Run();
-            Console.WriteLine("Simulation terminée avec succès.");
+
+            chrono.Stop();
+            Console.WriteLine();
+            Console.WriteLine($"  Simulation terminée avec succès en {chrono.ElapsedMilliseconds} ms.");
         }
         catch (Exception ex)
         {
+            chrono.Stop();
             Console.WriteLine();
-            Console.WriteLine("Une erreur est survenue pendant l'exécution du programme.");
-            Console.WriteLine($"Type   : {ex.GetType().Name}");
-            Console.WriteLine($"Détail : {ex.Message}");
+            Console.WriteLine("[ERREUR] Une exception est survenue pendant l'exécution :");
+            Console.WriteLine($"  Type   : {ex.GetType().Name}");
+            Console.WriteLine($"  Détail : {ex.Message}");
         }
 
-        Console.WriteLine("=== Fin du programme ===");
+        Console.WriteLine();
+        Console.WriteLine("══════════════════════════════════════════════════");
+        Console.WriteLine("  Fin du programme.");
+        Console.WriteLine("══════════════════════════════════════════════════");
     }
 
+    // Crée le dossier Data s'il n'existe pas encore
     private static void EnsureDataFolderExists(string dataFolder)
     {
         if (!Directory.Exists(dataFolder))
         {
             Directory.CreateDirectory(dataFolder);
-            Console.WriteLine($"Dossier créé : {dataFolder}");
+            Console.WriteLine($"  Dossier créé : {dataFolder}");
         }
     }
 }

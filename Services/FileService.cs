@@ -1,15 +1,12 @@
-﻿//using INF1009.Models;
+//using INF1009.Models;
 
 namespace INF1009.Services;
 
-/* 
- Centralise tout accès aux fichiers de simulation.
- Fichiers gérés :
-   Slec.txt — jeu d'essai, lu par ET (une communication par ligne)
-   Secr.txt — résultats écrits par ET
-   Lecr.txt — paquets émis par ER vers la couche liaison
-   Llec.txt — réponses reçues de la couche liaison (simulées)
-*/
+// Centralise tout accès aux fichiers de simulation.
+// Slec.txt — jeu d'essai lu par ET
+// Secr.txt — résultats écrits par ET
+// Lecr.txt — paquets émis par ER vers la couche liaison
+// Llec.txt — réponses reçues de la couche liaison (simulées)
 public class FileService
 {
     private readonly string _slecPath;
@@ -17,7 +14,7 @@ public class FileService
     private readonly string _lecrPath;
     private readonly string _llecPath;
 
-    // Verrou partagé pour les écritures concurrentes (ET et ER tournent en parallèle).
+    // Verrou pour éviter les conflits d'écriture si ET et ER écrivent en même temps
     private readonly object _writeLock = new();
 
     public FileService(string slecPath, string secrPath,
@@ -28,13 +25,8 @@ public class FileService
         _lecrPath = lecrPath;
         _llecPath = llecPath;
     }
-    
-    // Initialisation
-    
-    /* <summary>
-    /// Vide les trois fichiers de sortie au démarrage de la simulation.
-    /// Appeler depuis Program.cs avant de lancer ET et ER.
-    */
+
+    // Vide les fichiers de sortie avant de démarrer une nouvelle simulation
     public void ClearOutputFiles()
     {
         File.WriteAllText(_secrPath, string.Empty);
@@ -42,14 +34,7 @@ public class FileService
         File.WriteAllText(_llecPath, string.Empty);
     }
 
-   
-    // Lecture — Slec.txt
-    
-    /*
-     Lit toutes les demandes du jeu d'essai.
-     Chaque ligne non vide représente un message à transmettre.
-     Les lignes vides et commentaires (# …) sont ignorés.
-    */
+    // Retourne les lignes utiles de Slec.txt (ignore les commentaires et lignes vides)
     public IEnumerable<string> ReadRequests()
     {
         if (!File.Exists(_slecPath))
@@ -60,30 +45,21 @@ public class FileService
                    .Where(l => l.Length > 0 && !l.StartsWith('#'));
     }
 
-    
-    // Écriture — Secr.txt (résultats ET)
-    
-    // Enregistre un résultat de connexion dans Secr.txt.
-    
+    // Écrit une ligne de résultat dans Secr.txt
     public void WriteResult(int endpointId, int src, int dst, string result)
     {
         var line = $"[IDENT {endpointId,3}] src={src,-3} dst={dst,-3} → {result}";
         AppendLine(_secrPath, line);
     }
-    
-    // Écriture — Lecr.txt (paquets émis vers la liaison)
-    
-    // Enregistre un paquet émis par ER vers la couche liaison.
-    
+
+    // Écrit un paquet émis par ER dans Lecr.txt
     public void WriteEmittedPacket(int connNum, string label, string binaryPayload)
     {
         var line = $"[CONN {connNum,3}] EMIT  {label,-30}: {binaryPayload}";
         AppendLine(_lecrPath, line);
     }
-    
-    // Écriture — Llec.txt (réponses reçues de la liaison)
-    
-    // Enregistre une réponse reçue (ou une absence de réponse) de la liaison.
+
+    // Écrit la réponse reçue (ou l'absence de réponse) dans Llec.txt
     public void WriteReceivedResponse(int connNum, string label,
                                        string? binaryPayload = null)
     {
@@ -92,8 +68,6 @@ public class FileService
             : $"[CONN {connNum,3}] RECV  {label}";
         AppendLine(_llecPath, line);
     }
-    
-    // Helpers privés
 
     private void AppendLine(string path, string line)
     {

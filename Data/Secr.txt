@@ -1,15 +1,10 @@
-[IDENT   1] src=48  dst=165 → Communication réussie | conn=1 | 14 octets transmis.
-[IDENT   2] src=78  dst=144 → Connexion refusée par le distant.
-[IDENT   3] src=51  dst=26  → Communication réussie | conn=3 | 12 octets transmis.
-[IDENT   4] src=126 dst=108 → Communication réussie | conn=4 | 14 octets transmis.
-[IDENT   5] src=240 dst=137 → Échec du transfert : erreur réseau ou absence d'acquittement.
-[IDENT   6] src=104 dst=23  → Connexion refusée par le distant.
-[IDENT   7] src=242 dst=116 → Communication réussie | conn=7 | 14 octets transmis.
-[IDENT   8] src=230 dst=31  → Communication réussie | conn=8 | 135 octets transmis.
-[IDENT   9] src=31  dst=116 → Communication réussie | conn=9 | 12 octets transmis.
-[IDENT  10] src=118 dst=84  → Communication réussie | conn=10 | 13 octets transmis.
-[IDENT  11] src=62  dst=141 → Communication réussie | conn=11 | 13 octets transmis.
-[IDENT  12] src=52  dst=113 → Connexion refusée par le distant.
-[IDENT  13] src=95  dst=54  → Connexion refusée par le fournisseur.
-[IDENT  14] src=136 dst=241 → Communication réussie | conn=14 | 9 octets transmis.
-[IDENT  15] src=128 dst=69  → Communication réussie | conn=15 | 12 octets transmis.
+[IDENT   1] src=42  dst=100 → Communication réussie | conn=1 | 43 octets transmis.
+[IDENT   2] src=23  dst=157 → Communication réussie | conn=2 | 310 octets transmis.
+[IDENT   3] src=50  dst=200 → Communication réussie | conn=3 | 128 octets transmis.
+[IDENT   4] src=27  dst=88  → Connexion refusée par le fournisseur.
+[IDENT   5] src=19  dst=75  → Connexion refusée par le fournisseur.
+[IDENT   6] src=13  dst=99  → Connexion refusée par le distant.
+[IDENT   7] src=61  dst=24  → Communication réussie | conn=6 | 2 octets transmis.
+[IDENT   8] src=15  dst=80  → Échec du transfert : erreur réseau ou absence d'acquittement.
+[IDENT   9] src=62  dst=130 → Communication réussie | conn=8 | 67 octets transmis.
+[IDENT  10] src=71  dst=190 → Communication réussie | conn=9 | 67 octets transmis.

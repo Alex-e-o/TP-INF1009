@@ -1,11 +1,14 @@
-﻿using INF1009.Models;
+using INF1009.Models;
 
 namespace INF1009.Services;
 
+// Découpe les données utilisateur en paquets de max 128 octets
 public class SegmentationService
 {
     private const int MaxDataSize = 128;
-    
+
+    // Construit la liste des paquets à envoyer pour un message donné
+    // Le bit M (More) est mis à 1 sur tous les paquets sauf le dernier
     public List<Packet> BuildDataPackets(ConnectionContext context, byte[] userData)
     {
         var packets = new List<Packet>();
@@ -25,6 +28,7 @@ public class SegmentationService
                 .Take(chunkSize)
                 .ToArray();
 
+            // M=1 tant qu'il reste des données après ce paquet
             bool moreBit = (offset + chunkSize) < userData.Length;
 
             Packet packet = Packet.DataPacket(
@@ -43,12 +47,14 @@ public class SegmentationService
 
         return packets;
     }
-    
+
+    // Retourne vrai si le message dépasse la taille maximale d'un paquet
     public bool RequiresSegmentation(byte[]? userData)
     {
         return userData is not null && userData.Length > MaxDataSize;
     }
-    
+
+    // Retourne le nombre de paquets nécessaires pour transmettre le message
     public int GetSegmentCount(byte[]? userData)
     {
         if (userData is null || userData.Length == 0)

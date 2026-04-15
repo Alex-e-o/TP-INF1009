@@ -1,4 +1,4 @@
-# Slec.txt — Jeu d'essai de la simulation
+# S_lec.txt — Jeu d'essai de la simulation
 # Format : COMMANDE;param1;param2
 #
 # CONNECT;source;destination  → demande de connexion (adresses 0-254)
@@ -7,31 +7,79 @@
 #
 # Les lignes vides et commentaires (# ...) sont ignorés.
 
+# ============================================================
 # Scénario 1 : connexion normale + données courtes + libération
+# src=42 → aucun multiple critique → succès attendu, ACK reçu
+# ============================================================
 CONNECT;42;100
 DATA;1;Bonjour, ceci est le premier message court.
 DISCONNECT;1
 
+# ============================================================
 # Scénario 2 : connexion avec message long (segmentation en 3 paquets)
+# src=23 → aucun multiple critique → succès attendu
+# Message ~300 octets → 3 paquets (128 + 128 + reste), M=1, M=1, M=0
+# ============================================================
 CONNECT;23;157
 DATA;2;SEGMENT_TEST: XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 DISCONNECT;2
 
-# Scénario 3 : message de 128 octets exactement (1 paquet, M=0)
+# ============================================================
+# Scénario 3 : message de 128 octets exactement (cas limite, 1 paquet, M=0)
+# src=50 → aucun multiple critique → succès attendu
+# 128 octets = taille maximale, pas de segmentation déclenchée (spec : strictement supérieur)
+# ============================================================
 CONNECT;50;200
 DATA;3;AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 DISCONNECT;3
 
+# ============================================================
 # Scénario 4 : refus du fournisseur (src=27, multiple de 27)
+# ER refuse localement → N_DISCONNECT.ind envoyé à ET, raison=0x02
+# Aucun paquet d'appel ne doit apparaître dans L_ecr
+# ============================================================
 CONNECT;27;88
 
+# ============================================================
 # Scénario 5 : pas de réponse du distant (src=19, multiple de 19)
+# Le paquet d'appel est émis mais aucune réponse n'arrive → timeout
+# ER envoie N_DISCONNECT.ind à ET
+# ============================================================
 CONNECT;19;75
 
+# ============================================================
 # Scénario 6 : refus du distant (src=13, multiple de 13)
+# Le paquet d'appel est émis, réponse = paquet d'indication de libération, raison=0x01
+# ER envoie N_DISCONNECT.ind à ET
+# ============================================================
 CONNECT;13;99
 
-# Scénario 7 : connexion normale + données minimales
-CONNECT;60;24
+# ============================================================
+# Scénario 7 : connexion normale + données minimales + libération
+# CORRECTION : src=42 remplacé par src=61 (non multiple de 15, 19, 13, 27)
+# ============================================================
+CONNECT;61;24
 DATA;7;OK
 DISCONNECT;7
+
+# ============================================================
+# Scénario 8 : pas d'ACK sur données (src=15, multiple de 15)
+# Le paquet de données est émis, aucun ACK ne revient → timeout
+# ER réémet le paquet une fois (unique tentative selon spec)
+# Si toujours pas d'ACK → abandon, résultat écrit dans S_ecr
+# ============================================================
+CONNECT;15;80
+DATA;8;Message dont l'ACK ne reviendra jamais.
+DISCONNECT;8
+
+# ============================================================
+# Scénario 9 : connexions simultanées (test de la table d'états d'ET)
+# Deux connexions ouvertes en parallèle avant tout échange de données
+# src=62 et src=71 → aucun multiple critique → deux succès attendus
+# ============================================================
+CONNECT;62;130
+CONNECT;71;190
+DATA;9;Message sur connexion 9 pendant que connexion 10 est aussi ouverte.
+DATA;10;Message sur connexion 10 pendant que connexion 9 est aussi ouverte.
+DISCONNECT;9
+DISCONNECT;10
