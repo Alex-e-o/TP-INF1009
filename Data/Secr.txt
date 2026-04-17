@@ -2,7 +2,7 @@
 [IDENT   2] src=23  dst=157 → Communication réussie | conn=2 | 310 octets transmis.
 [IDENT   3] src=50  dst=200 → Communication réussie | conn=3 | 128 octets transmis.
 [IDENT   4] src=27  dst=88  → Connexion refusée par le fournisseur.
-[IDENT   5] src=19  dst=75  → Connexion refusée par le fournisseur.
+[IDENT   5] src=19  dst=75  → Pas de réponse du distant (timeout).
 [IDENT   6] src=13  dst=99  → Connexion refusée par le distant.
 [IDENT   7] src=61  dst=24  → Communication réussie | conn=6 | 2 octets transmis.
 [IDENT   8] src=15  dst=80  → Échec du transfert : erreur réseau ou absence d'acquittement.

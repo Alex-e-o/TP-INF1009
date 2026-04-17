@@ -56,7 +56,7 @@ CONNECT;13;99
 
 # ============================================================
 # Scénario 7 : connexion normale + données minimales + libération
-# CORRECTION : src=42 remplacé par src=61 (non multiple de 15, 19, 13, 27)
+# src=61 (non multiple de 15, 19, 13, 27)
 # ============================================================
 CONNECT;61;24
 DATA;7;OK

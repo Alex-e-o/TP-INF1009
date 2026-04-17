@@ -5,8 +5,8 @@ namespace INF1009.Services;
 
 public class TransportEntity
 {
-    private readonly FileService _fileService;
-    private readonly NetworkEntity _networkEntity;
+    private readonly FileService      _fileService;
+    private readonly PrimitiveChannel _channel;
 
     // Connexions actives indexées par endpointId
     private readonly Dictionary<int, ConnectionContext> _connections = new();
@@ -14,19 +14,23 @@ public class TransportEntity
     private readonly Dictionary<int, int> _lastDataLength = new();
     private int _nextEndpointId = 1;
 
-    public TransportEntity(FileService fileService, NetworkEntity networkEntity)
+    public TransportEntity(FileService fileService, PrimitiveChannel channel)
     {
         _fileService = fileService;
-        _networkEntity = networkEntity;
+        _channel     = channel;
     }
 
-    // Lit et exécute chaque commande du fichier S_lec.txt
+    // Lit et exécute chaque commande du fichier S_lec.txt,
+    // puis signale à ER qu'il n'y a plus de primitives à traiter.
     public void Run()
     {
         foreach (string line in _fileService.ReadRequests())
         {
             ProcessLine(line);
         }
+
+        // Indique à ER que la simulation est terminée
+        _channel.CompleteAdding();
     }
 
     // Identifie la commande (CONNECT / DATA / DISCONNECT) et appelle le bon handler
@@ -62,7 +66,7 @@ public class TransportEntity
         _connections[endpointId] = context;
 
         Primitive connectReq = Primitive.ConnectReq(endpointId, src, dst);
-        Primitive? connectResponse = _networkEntity.HandlePrimitive(connectReq);
+        Primitive? connectResponse = _channel.SendAndWait(connectReq);
 
         if (connectResponse is null)
         {
@@ -79,6 +83,7 @@ public class TransportEntity
             {
                 (byte)ReleaseReason.UserRefused     => "Connexion refusée par le distant.",
                 (byte)ReleaseReason.ProviderRefused => "Connexion refusée par le fournisseur.",
+                (byte)ReleaseReason.Timeout         => "Pas de réponse du distant (timeout).",
                 _ => $"Connexion libérée/refusée (raison=0x{connectResponse.Reason:X2})."
             };
             _fileService.WriteResult(endpointId, src, dst, label);
@@ -106,7 +111,7 @@ public class TransportEntity
         _lastDataLength[endpointId] = data.Length;
 
         Primitive dataReq = Primitive.DataReq(endpointId, data);
-        Primitive? dataResponse = _networkEntity.HandlePrimitive(dataReq);
+        Primitive? dataResponse = _channel.SendAndWait(dataReq);
 
         // Si ER retourne un N_DISCONNECT.ind, le transfert a échoué
         if (dataResponse is not null && dataResponse.Type == PrimitiveType.N_DISCONNECT_IND)
@@ -139,7 +144,7 @@ public class TransportEntity
             return;
 
         Primitive disconnectReq = Primitive.DisconnectReq(endpointId);
-        Primitive? disconnectResponse = _networkEntity.HandlePrimitive(disconnectReq);
+        Primitive? disconnectResponse = _channel.SendAndWait(disconnectReq);
 
         context.State = ConnectionState.Closed;
 

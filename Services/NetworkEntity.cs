@@ -6,7 +6,8 @@ namespace INF1009.Services;
 public class NetworkEntity
 {
     private readonly LinkServiceSimulator _linkServiceSimulator;
-    private readonly SegmentationService _segmentationService;
+    private readonly SegmentationService  _segmentationService;
+    private readonly PrimitiveChannel     _channel;
 
     // Double index pour retrouver un contexte soit par endpointId (côté ET) soit par numéro de connexion (côté liaison)
     private readonly Dictionary<int, ConnectionContext> _contextsByEndpointId = new();
@@ -14,14 +15,28 @@ public class NetworkEntity
 
     private int _nextConnectionNumber = 1;
 
-    public NetworkEntity(LinkServiceSimulator linkServiceSimulator, SegmentationService segmentationService)
+    public NetworkEntity(LinkServiceSimulator linkServiceSimulator,
+                         SegmentationService  segmentationService,
+                         PrimitiveChannel     channel)
     {
         _linkServiceSimulator = linkServiceSimulator;
-        _segmentationService = segmentationService;
+        _segmentationService  = segmentationService;
+        _channel              = channel;
     }
 
-    // Point d'entrée unique : dispatch selon le type de primitive reçue d'ET
-    public Primitive? HandlePrimitive(Primitive primitive)
+    // Boucle principale d'ER : traite les primitives envoyées par ET,
+    // répond à chacune, et s'arrête quand ET a signalé la fin.
+    public void RunLoop()
+    {
+        foreach (Primitive req in _channel.ConsumeRequests())
+        {
+            Primitive? response = HandlePrimitive(req);
+            _channel.SendResponse(response);
+        }
+    }
+
+    // Traite une primitive reçue d'ET (utilisé en interne par RunLoop)
+    private Primitive? HandlePrimitive(Primitive primitive)
     {
         return primitive.Type switch
         {
@@ -67,13 +82,13 @@ public class NetworkEntity
 
         Packet? response = _linkServiceSimulator.Send(callPacket, context.SourceAddress);
 
-        // Pas de réponse = timeout → connexion refusée par le fournisseur
+        // Pas de réponse = timeout → aucune réponse du distant
         if (response is null)
         {
             context.State = ConnectionState.Closed;
             return Primitive.DisconnectInd(
                 endpointId: context.EndpointId,
-                reason: (byte)ReleaseReason.ProviderRefused);
+                reason: (byte)ReleaseReason.Timeout);
         }
 
         if (response.Type == PacketType.ConnectionGranted)

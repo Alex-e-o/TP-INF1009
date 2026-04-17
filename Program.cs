@@ -17,7 +17,7 @@ internal class Program
 
         try
         {
-            // --- Résolution des chemins ---
+            // Résolution des chemins 
             string projectRoot = Path.GetFullPath(
                 Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
 
@@ -43,19 +43,28 @@ internal class Program
                 return;
             }
 
-            // --- Instanciation des couches ---
+            // Instanciation des couches 
             Console.WriteLine("[2/3] Initialisation des entités...");
             var fileService          = new FileService(slecPath, secrPath, lecrPath, llecPath);
             var segmentationService  = new SegmentationService();
             var linkServiceSimulator = new LinkServiceSimulator(fileService);
-            var networkEntity        = new NetworkEntity(linkServiceSimulator, segmentationService);
-            var transportEntity      = new TransportEntity(fileService, networkEntity);
+            var channel              = new PrimitiveChannel();
+            var networkEntity        = new NetworkEntity(linkServiceSimulator, segmentationService, channel);
+            var transportEntity      = new TransportEntity(fileService, channel);
 
             fileService.ClearOutputFiles();
 
-            // --- Lancement de la simulation ---
+            // Lancement de la simulation dans deux threads séparés 
             Console.WriteLine("[3/3] Exécution de la simulation...");
-            transportEntity.Run();
+
+            var erThread = new Thread(networkEntity.RunLoop) { Name = "ER" };
+            var etThread = new Thread(transportEntity.Run)   { Name = "ET" };
+
+            erThread.Start();
+            etThread.Start();
+
+            etThread.Join();
+            erThread.Join();
 
             chrono.Stop();
             Console.WriteLine();

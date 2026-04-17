@@ -18,6 +18,7 @@ public enum ReleaseReason : byte
     None             = 0x00,
     UserRefused      = 0x01,  // Le distant refuse (absent, occupé, manque de ressources)
     ProviderRefused  = 0x02,  // Le fournisseur de service réseau refuse
+    Timeout          = 0x03,  // Pas de réponse du distant (timeout)
 }
 
 // Représente un paquet réseau (NPDU — Network Protocol Data Unit).
@@ -65,6 +66,12 @@ public class Packet
         PacketType.Call or PacketType.ConnectionGranted =>
             [(byte)ConnectionNumber, (byte)Type, (byte)SourceAddress, (byte)DestinationAddress],
 
+        // §2.3 : Demande de libération (appelant → réseau) — pas d'octet de raison
+        PacketType.Release when Reason == ReleaseReason.None =>
+            [(byte)ConnectionNumber, (byte)Type,
+             (byte)SourceAddress, (byte)DestinationAddress],
+
+        // §2.1 : Indication de libération (distant → appelant) — avec octet de raison
         PacketType.Release =>
             [(byte)ConnectionNumber, (byte)Type,
              (byte)SourceAddress, (byte)DestinationAddress,
