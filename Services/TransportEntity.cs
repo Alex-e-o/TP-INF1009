@@ -1,36 +1,60 @@
-﻿using System.Text;
+using System.Text;
 using INF1009.Models;
 
 namespace INF1009.Services;
 
 public class TransportEntity
 {
-    private readonly FileService _fileService;
-    private readonly NetworkEntity _networkEntity;
-    private readonly Random _random;
+    private readonly FileService      _fileService;
+    private readonly PrimitiveChannel _channel;
 
+    // Connexions actives indexées par endpointId
     private readonly Dictionary<int, ConnectionContext> _connections = new();
+    // Taille des dernières données envoyées par connexion (pour le résultat final)
+    private readonly Dictionary<int, int> _lastDataLength = new();
     private int _nextEndpointId = 1;
 
-    public TransportEntity(FileService fileService, NetworkEntity networkEntity)
+    public TransportEntity(FileService fileService, PrimitiveChannel channel)
     {
         _fileService = fileService;
-        _networkEntity = networkEntity;
-        _random = new Random();
+        _channel     = channel;
     }
-    
+
+    // Lit et exécute chaque commande du fichier S_lec.txt,
+    // puis signale à ER qu'il n'y a plus de primitives à traiter.
     public void Run()
     {
-        foreach (string message in ReadMessages())
+        foreach (string line in _fileService.ReadRequests())
         {
-            ProcessCommunication(message);
+            ProcessLine(line);
+        }
+
+        // Indique à ER que la simulation est terminée
+        _channel.CompleteAdding();
+    }
+
+    // Identifie la commande (CONNECT / DATA / DISCONNECT) et appelle le bon handler
+    private void ProcessLine(string line)
+    {
+        var parts = line.Split(';', 3);
+        switch (parts[0])
+        {
+            case "CONNECT" when parts.Length >= 3:
+                HandleConnect(int.Parse(parts[1]), int.Parse(parts[2]));
+                break;
+            case "DATA" when parts.Length >= 3:
+                HandleData(int.Parse(parts[1]), parts[2]);
+                break;
+            case "DISCONNECT" when parts.Length >= 2:
+                HandleDisconnect(int.Parse(parts[1]));
+                break;
         }
     }
 
-    private void ProcessCommunication(string message)
+    // Demande une connexion à ER avec les adresses lues dans S_lec
+    private void HandleConnect(int src, int dst)
     {
-        int endpointId = AllocateEndpointId();
-        (int src, int dst) = GenerateDistinctAddresses();
+        int endpointId = _nextEndpointId++;
 
         var context = new ConnectionContext
         {
@@ -39,15 +63,10 @@ public class TransportEntity
             DestinationAddress = dst,
             State = ConnectionState.WaitingForConfirmation
         };
-
         _connections[endpointId] = context;
 
-        Primitive connectReq = Primitive.ConnectReq(
-            endpointId: endpointId,
-            src: src,
-            dst: dst);
-
-        Primitive? connectResponse = _networkEntity.HandlePrimitive(connectReq);
+        Primitive connectReq = Primitive.ConnectReq(endpointId, src, dst);
+        Primitive? connectResponse = _channel.SendAndWait(connectReq);
 
         if (connectResponse is null)
         {
@@ -56,99 +75,97 @@ public class TransportEntity
             return;
         }
 
+        // La connexion a été refusée (fournisseur ou distant) — on écrit le résultat maintenant
         if (connectResponse.Type == PrimitiveType.N_DISCONNECT_IND)
         {
             context.State = ConnectionState.Closed;
-
-            string refusalLabel = connectResponse.Reason switch
+            string label = connectResponse.Reason switch
             {
-                (byte)ReleaseReason.UserRefused => "Connexion refusée par le distant.",
+                (byte)ReleaseReason.UserRefused     => "Connexion refusée par le distant.",
                 (byte)ReleaseReason.ProviderRefused => "Connexion refusée par le fournisseur.",
+                (byte)ReleaseReason.Timeout         => "Pas de réponse du distant (timeout).",
                 _ => $"Connexion libérée/refusée (raison=0x{connectResponse.Reason:X2})."
             };
-
-            _fileService.WriteResult(endpointId, src, dst, refusalLabel);
+            _fileService.WriteResult(endpointId, src, dst, label);
             return;
         }
 
-        if (connectResponse.Type != PrimitiveType.N_CONNECT_CONF)
+        // Connexion acceptée — on retient le numéro de connexion attribué par ER
+        if (connectResponse.Type == PrimitiveType.N_CONNECT_CONF)
         {
-            context.State = ConnectionState.Closed;
-            _fileService.WriteResult(endpointId, src, dst, "Erreur : réponse inattendue à la connexion.");
-            return;
+            context.ConnectionNumber = connectResponse.ConnectionNumber;
+            context.State = ConnectionState.Established;
         }
+    }
 
-        context.ConnectionNumber = connectResponse.ConnectionNumber;
-        context.State = ConnectionState.Established;
+    // Envoie des données sur une connexion établie
+    private void HandleData(int endpointId, string message)
+    {
+        if (!_connections.TryGetValue(endpointId, out var context))
+            return;
+
+        if (context.State != ConnectionState.Established)
+            return;
 
         byte[] data = Encoding.UTF8.GetBytes(message);
+        _lastDataLength[endpointId] = data.Length;
+
         Primitive dataReq = Primitive.DataReq(endpointId, data);
+        Primitive? dataResponse = _channel.SendAndWait(dataReq);
 
-        Primitive? dataResponse = _networkEntity.HandlePrimitive(dataReq);
-
+        // Si ER retourne un N_DISCONNECT.ind, le transfert a échoué
         if (dataResponse is not null && dataResponse.Type == PrimitiveType.N_DISCONNECT_IND)
         {
             context.State = ConnectionState.Closed;
-
             string result = dataResponse.Reason switch
             {
                 (byte)ReleaseReason.ProviderRefused => "Échec du transfert : erreur réseau ou absence d'acquittement.",
-                (byte)ReleaseReason.UserRefused => "Échec du transfert : libération distante.",
+                (byte)ReleaseReason.UserRefused     => "Échec du transfert : libération distante.",
                 _ => $"Échec du transfert (raison=0x{dataResponse.Reason:X2})."
             };
-
-            _fileService.WriteResult(endpointId, src, dst, result);
-            return;
+            _fileService.WriteResult(endpointId, context.SourceAddress, context.DestinationAddress, result);
         }
+    }
+
+    // Libère une connexion établie et écrit le résultat final dans S_ecr
+    private void HandleDisconnect(int endpointId)
+    {
+        if (!_connections.TryGetValue(endpointId, out var context))
+            return;
+
+        // Si la connexion est déjà fermée (ex. échec antérieur du transfert de données),
+        // ET a déjà reçu N_DISCONNECT.ind et le résultat a été écrit.
+        // On ignore silencieusement ce DISCONNECT car la connexion n'est plus active.
+        if (context.State == ConnectionState.Closed)
+            return;
+
+        // Seule une connexion établie peut être libérée via N_DISCONNECT.req
+        if (context.State != ConnectionState.Established)
+            return;
 
         Primitive disconnectReq = Primitive.DisconnectReq(endpointId);
-        Primitive? disconnectResponse = _networkEntity.HandlePrimitive(disconnectReq);
+        Primitive? disconnectResponse = _channel.SendAndWait(disconnectReq);
 
         context.State = ConnectionState.Closed;
+
+        int dataLength = _lastDataLength.TryGetValue(endpointId, out int len) ? len : 0;
 
         if (disconnectResponse is not null && disconnectResponse.Type == PrimitiveType.N_DISCONNECT_IND)
         {
             _fileService.WriteResult(
                 endpointId,
-                src,
-                dst,
-                $"Communication réussie | conn={context.ConnectionNumber} | {data.Length} octets transmis.");
+                context.SourceAddress,
+                context.DestinationAddress,
+                $"Communication réussie | conn={context.ConnectionNumber} | {dataLength} octets transmis.");
         }
         else
         {
             _fileService.WriteResult(
                 endpointId,
-                src,
-                dst,
+                context.SourceAddress,
+                context.DestinationAddress,
                 $"Communication terminée avec état incertain | conn={context.ConnectionNumber}.");
         }
-    }
-    
-    private IEnumerable<string> ReadMessages()
-    {
-        foreach (var line in _fileService.ReadRequests().Cast<string>())
-        {
-            yield return line;
-        }
-    }
-    
-    private (int src, int dst) GenerateDistinctAddresses()
-    {
-        int src = _random.Next(0, 255);
-        int dst;
-
-        do
-        {
-            dst = _random.Next(0, 255);
-        }
-        while (dst == src);
-
-        return (src, dst);
-    }
-
-    private int AllocateEndpointId()
-    {
-        return _nextEndpointId++;
     }
 
     public ConnectionContext? GetConnectionContext(int endpointId)
