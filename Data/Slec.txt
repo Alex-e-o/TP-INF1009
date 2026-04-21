@@ -1,4 +1,4 @@
-# S_lec.txt — Jeu d'essai de la simulation
+# S_lec.txt — Test de la simulation
 # Format : COMMANDE;param1;param2
 #
 # CONNECT;source;destination  → demande de connexion (adresses 0-254)
