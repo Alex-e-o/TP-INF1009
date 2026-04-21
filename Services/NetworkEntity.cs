@@ -143,6 +143,13 @@ public class NetworkEntity
 
             if (!success)
             {
+                var releasePacket = Packet.ReleasePacket(
+                    connNum: context.ConnectionNumber,
+                    src:     context.SourceAddress,
+                    dst:     context.DestinationAddress,
+                    reason:  ReleaseReason.None);
+                _linkServiceSimulator.Send(releasePacket, context.SourceAddress);
+
                 context.State = ConnectionState.Closed;
                 return Primitive.DisconnectInd(
                     endpointId: context.EndpointId,
